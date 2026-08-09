@@ -1,0 +1,253 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  telegramId    String   @unique
+  username      String?
+  displayName   String?
+  heliumBalance Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  characters       UserCharacter[]
+  transactions     CurrencyTransaction[]
+  dailyBoxes       DailyBox[]
+  puzzlesSolved    Int                    @default(0)
+  fightsWon        Int                    @default(0)
+  fightsLost       Int                    @default(0)
+  heliumEarnedWeek Int                    @default(0)
+
+  fightsAsP1 Fight[] @relation("FightPlayer1")
+  fightsAsP2 Fight[] @relation("FightPlayer2")
+  leaderboardEntries LeaderboardEntry[]
+  fightParticipations FightParticipant[]
+  invitesCreated FightInvite[]
+
+  // Persistent UI/session state (survives bot restart) instead of in-memory session.
+  selectedUserCharacterId String?
+  awaitingFriendUsername  Boolean @default(false)
+  pendingFriendCharacterId String?
+
+  @@index([telegramId])
+  @@index([heliumEarnedWeek])
+}
+
+model Character {
+  id            String @id @default(cuid())
+  key           String @unique // stable template key, e.g. "rookie"
+  name          String
+  rarity        String // COMMON | RARE | EPIC | LEGENDARY
+  price         Int
+  baseMaxHp     Int
+  basePower     Int
+  baseSpeed     Int
+  ability       String // POWER | SPEED | NONE
+  description   String?
+
+  owners UserCharacter[]
+}
+
+model UserCharacter {
+  id          String   @id @default(cuid())
+  userId      String
+  characterId String
+  currentHp   Int
+  maxHp       Int
+  power       Int
+  speed       Int
+  hpLevel     Int      @default(1)
+  powerLevel  Int      @default(1)
+  speedLevel  Int      @default(1)
+  status      String   @default("ACTIVE") // ACTIVE | DEFEATED
+  acquiredAt  DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id])
+  character Character @relation(fields: [characterId], references: [id])
+
+  fightParticipants FightParticipant[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Puzzle {
+  id          String  @id @default(cuid())
+  question    String
+  answerA     String
+  answerB     String
+  correct     String // "A" | "B"
+  difficulty  String // EASY | MEDIUM | HARD | SPECIAL
+  category    String
+  explanation String?
+  hint        String?
+  active      Boolean @default(true)
+  metadata    String? // JSON string for extensibility
+
+  fightAnswers FightAnswer[]
+
+  @@index([difficulty])
+  @@index([category])
+  @@index([active])
+}
+
+model Fight {
+  id          String   @id @default(cuid())
+  mode        String // FRIEND | RANDOM
+  state       String   @default("WAITING")
+  player1Id   String
+  player2Id   String?
+  player1Roll Int?
+  player2Roll Int?
+  startingPlayer Int? // 1 or 2
+  currentTurn Int? // 1 or 2
+  currentRound Int @default(1)
+  winnerId    String?
+  rewardGranted Boolean @default(false)
+  doubleChallengeUsed Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  finishedAt  DateTime?
+
+  player1 User  @relation("FightPlayer1", fields: [player1Id], references: [id])
+  player2 User? @relation("FightPlayer2", fields: [player2Id], references: [id])
+
+  participants FightParticipant[]
+  turns        FightTurn[]
+
+  @@index([state])
+  @@index([mode, state])
+}
+
+model FightParticipant {
+  id              String  @id @default(cuid())
+  fightId         String
+  userId          String
+  slot            Int // 1 or 2
+  userCharacterId String?
+  hintUsesLeft    Int     @default(1)
+  speedUsesLeft   Int     @default(1)
+  correctCount    Int     @default(0)
+  totalTimeMs     Int     @default(0)
+  score           Float?
+
+  fight         Fight          @relation(fields: [fightId], references: [id])
+  user          User           @relation(fields: [userId], references: [id])
+  userCharacter UserCharacter? @relation(fields: [userCharacterId], references: [id])
+
+  @@unique([fightId, slot])
+  @@index([userId])
+}
+
+model FightTurn {
+  id        String   @id @default(cuid())
+  fightId   String
+  slot      Int // whose turn: 1 or 2
+  round     Int
+  status    String   @default("ACTIVE") // ACTIVE | COMPLETE
+  createdAt DateTime @default(now())
+
+  fight   Fight         @relation(fields: [fightId], references: [id])
+  answers FightAnswer[]
+
+  @@index([fightId])
+}
+
+model FightAnswer {
+  id           String   @id @default(cuid())
+  fightTurnId  String
+  puzzleId     String
+  slot         Int
+  selected     String? // "A" | "B" | null if timed out
+  correct      Boolean
+  responseMs   Int
+  difficulty   String
+  hintUsed     Boolean  @default(false)
+  speedBonusMs Int      @default(0)
+  presentedAt  DateTime @default(now())
+  answeredAt   DateTime?
+
+  fightTurn FightTurn @relation(fields: [fightTurnId], references: [id])
+  puzzle    Puzzle    @relation(fields: [puzzleId], references: [id])
+
+  @@unique([fightTurnId, puzzleId])
+  @@index([fightTurnId])
+}
+
+model FightInvite {
+  id                  String    @id @default(cuid())
+  code                String    @unique
+  creatorId           String
+  creatorCharacterId  String
+  status              String    @default("PENDING") // PENDING | ACCEPTED | EXPIRED | CANCELLED
+  fightId             String?
+  expiresAt           DateTime
+  createdAt           DateTime  @default(now())
+
+  creator User @relation(fields: [creatorId], references: [id])
+
+  @@index([code])
+  @@index([creatorId, status])
+}
+
+model DailyBox {
+  id        String   @id @default(cuid())
+  userId    String
+  claimedAt DateTime @default(now())
+  rewardKey String
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, claimedAt])
+}
+
+model Reward {
+  id         String   @id @default(cuid())
+  userId     String
+  sourceType String // DAILY_BOX | FIGHT_WIN | DOUBLE_CHALLENGE | PUZZLE
+  sourceId   String // idempotency key, e.g. fightId, dailyBoxId
+  kind       String // HELIUM | CHARACTER | ITEM
+  amount     Int?
+  characterKey String?
+  createdAt  DateTime @default(now())
+
+  @@unique([sourceType, sourceId, kind])
+  @@index([userId])
+}
+
+model CurrencyTransaction {
+  id         String   @id @default(cuid())
+  userId     String
+  amount     Int // positive = credit, negative = debit
+  reason     String // PUZZLE_REWARD | FIGHT_WIN | DAILY_BOX | DOUBLE_CHALLENGE | CHARACTER_PURCHASE | ADMIN
+  refId      String // idempotency key unique per (userId, reason, refId)
+  balanceAfter Int
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, reason, refId])
+  @@index([userId])
+}
+
+model LeaderboardEntry {
+  id           String   @id @default(cuid())
+  userId       String
+  weekKey      String // e.g. "2026-W32"
+  heliumEarned Int      @default(0)
+  wins         Int      @default(0)
+  losses       Int      @default(0)
+  puzzlesSolved Int     @default(0)
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, weekKey])
+  @@index([weekKey, heliumEarned])
+}
