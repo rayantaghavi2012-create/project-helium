@@ -6,22 +6,23 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "start": "node dist/index.js",
+    "start": "prisma migrate deploy && node dist/index.js",
     "build": "tsc -p tsconfig.json",
+    "postinstall": "prisma generate",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tests.json",
     "test": "vitest run",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev --name init",
+    "prisma:migrate": "prisma migrate dev",
     "seed": "tsx src/puzzles/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
     "dotenv": "^16.4.5",
-    "grammy": "^1.30.0"
+    "grammy": "^1.30.0",
+    "prisma": "^5.20.0"
   },
   "devDependencies": {
     "@types/node": "^22.7.4",
-    "prisma": "^5.20.0",
     "tsx": "^4.19.1",
     "typescript": "^5.6.2",
     "vitest": "^2.1.1"
