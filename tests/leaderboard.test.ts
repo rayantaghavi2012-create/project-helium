@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { describe, it, expect } from "vitest";
 import { prisma } from "../src/db/client.js";
 import { bumpLeaderboard, getWeeklyLeaderboard, getPlayerRank, currentWeekKey } from "../src/services/leaderboardService.js";
@@ -20,8 +21,13 @@ describe("leaderboardService", () => {
   it("ranks players by helium earned, descending", async () => {
     const low = await makeUser();
     const high = await makeUser();
+    // Randomized rather than a fixed magic number: this suite has been run
+    // multiple times against the same persistent DB, and a fixed value here
+    // previously tied with a leftover row from an earlier run, making the
+    // "top" ordering between equal values non-deterministic.
+    const highValue = 1_000_000 + randomInt(1_000_000);
     await bumpLeaderboard(prisma, low.id, { heliumEarned: 10 });
-    await bumpLeaderboard(prisma, high.id, { heliumEarned: 999_999 });
+    await bumpLeaderboard(prisma, high.id, { heliumEarned: highValue });
 
     // Query rank directly rather than relying on a fixed-size top-N containing
     // both users — the shared test DB accumulates rows across the whole suite.
