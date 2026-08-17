@@ -10,6 +10,7 @@ import {
   cashOut,
   startDoubleChallenge,
   resolveDoubleChallenge,
+  forfeitFight,
   FightError,
 } from "../src/services/fightService.js";
 import { getBalance } from "../src/services/walletService.js";
@@ -142,6 +143,19 @@ describe("fightService", () => {
     expect(amount).toBe(gameConfig.fight.winReward);
     expect(await getBalance(a.user.id)).toBe(gameConfig.fight.winReward);
     await expect(startDoubleChallenge(fight.id, a.user.id)).rejects.toBeInstanceOf(FightError);
+  });
+
+  it("lets a player leave an active fight and awards the opponent a single forfeit win", async () => {
+    await ensurePuzzles(10);
+    const a = await makeUserWithCharacter();
+    const b = await makeUserWithCharacter();
+    const fight = await createFriendFight(a.user.id, b.user.id, a.userCharacter.id, b.userCharacter.id);
+
+    const completed = await forfeitFight(fight.id, a.user.id);
+    expect(completed.state).toBe("FINISHED");
+    expect(completed.winnerId).toBe(b.user.id);
+    expect(await getBalance(b.user.id)).toBe(gameConfig.fight.winReward);
+    await expect(forfeitFight(fight.id, a.user.id)).rejects.toBeInstanceOf(FightError);
   });
 });
 

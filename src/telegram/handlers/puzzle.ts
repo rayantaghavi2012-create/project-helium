@@ -17,7 +17,7 @@ puzzleComposer.callbackQuery("menu:puzzle", async (ctx) => {
     return;
   }
 
-  await ctx.editMessageText(`🧩 *Daily Puzzle* (${puzzle.difficulty})\n\n${puzzle.question}`, {
+  await ctx.editMessageText(`🧩 *Puzzle* (${puzzle.difficulty})\n\n${puzzle.question}`, {
     parse_mode: "Markdown",
     reply_markup: dailyPuzzleAnswerKeyboard(puzzle.id, puzzle.answerA, puzzle.answerB),
   });

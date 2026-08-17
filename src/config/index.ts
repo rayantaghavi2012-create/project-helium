@@ -37,13 +37,13 @@ export const gameConfig = {
     cooldownHours: 24,
     // weight = relative probability; must be > 0
     rewardTable: [
-      { key: "HELIUM_20", kind: "HELIUM", amount: 20, weight: 30 },
-      { key: "HELIUM_50", kind: "HELIUM", amount: 50, weight: 20 },
-      { key: "HELIUM_100", kind: "HELIUM", amount: 100, weight: 8 },
-      { key: "CHARACTER_COMMON", kind: "CHARACTER", rarity: "COMMON", weight: 25 },
-      { key: "CHARACTER_RARE", kind: "CHARACTER", rarity: "RARE", weight: 12 },
-      { key: "CHARACTER_EPIC", kind: "CHARACTER", rarity: "EPIC", weight: 4 },
-      { key: "MYSTERY_ITEM", kind: "ITEM", weight: 1 },
+      { key: "HELIUM_20", kind: "HELIUM", amount: 20, weight: 45 },
+      { key: "HELIUM_50", kind: "HELIUM", amount: 50, weight: 30 },
+      { key: "HELIUM_100", kind: "HELIUM", amount: 100, weight: 10 },
+      { key: "CHARACTER_COMMON", kind: "CHARACTER", rarity: "COMMON", weight: 12 },
+      { key: "CHARACTER_RARE", kind: "CHARACTER", rarity: "RARE", weight: 2 },
+      { key: "CHARACTER_EPIC", kind: "CHARACTER", rarity: "EPIC", weight: 0.5 },
+      { key: "MYSTERY_ITEM", kind: "ITEM", weight: 0.5 },
     ] as DailyBoxReward[],
   },
 

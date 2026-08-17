@@ -80,7 +80,7 @@ async function sendNextPuzzleTo(api: Api, fightId: string, participant: Particip
     api,
     participant.user.telegramId,
     text,
-    puzzleAnswerKeyboard(next.fightAnswerId, next.puzzle.answerA, next.puzzle.answerB, allowHint)
+    puzzleAnswerKeyboard(fightId, next.fightAnswerId, next.puzzle.answerA, next.puzzle.answerB, allowHint)
   );
 }
 

@@ -21,7 +21,7 @@ export function isCorrectAnswer(puzzle: { correct: string }, selected: "A" | "B"
 }
 
 /**
- * Solving the standalone "daily puzzle" (outside of a fight) earns Helium directly.
+ * Solving a standalone puzzle (outside of a fight) earns Helium directly.
  * Idempotent per (userId, puzzleId, day) via refId so a duplicated callback can't pay twice.
  */
 export async function rewardDailyPuzzleSolve(userId: string, puzzleId: string, difficulty: string) {

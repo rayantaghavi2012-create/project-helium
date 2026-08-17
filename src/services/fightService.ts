@@ -160,6 +160,46 @@ export async function cancelRandomFight(userId: string, fightId: string) {
   });
 }
 
+/** Ends an in-progress fight immediately and awards the win to the opponent. */
+export async function forfeitFight(fightId: string, userId: string) {
+  return prisma.$transaction(async (tx) => {
+    const fight = await tx.fight.findUniqueOrThrow({
+      where: { id: fightId },
+      include: { participants: true },
+    });
+    if (!["PLAYER_1_TURN", "PLAYER_2_TURN"].includes(fight.state)) {
+      throw new FightError("This fight can no longer be left.");
+    }
+
+    const forfeitingPlayer = fight.participants.find((participant) => participant.userId === userId);
+    const winner = fight.participants.find((participant) => participant.userId !== userId);
+    if (!forfeitingPlayer || !winner) throw new FightError("You are not a participant in this fight.");
+
+    // Claim the active state so a simultaneous answer cannot also finish and pay this fight.
+    const claimed = await tx.fight.updateMany({
+      where: { id: fightId, state: { in: ["PLAYER_1_TURN", "PLAYER_2_TURN"] } },
+      data: {
+        state: "FINISHED",
+        winnerId: winner.userId,
+        rewardGranted: true,
+        finishedAt: new Date(),
+      },
+    });
+    if (claimed.count === 0) throw new FightError("This fight was just completed.");
+
+    await applyCurrencyTransaction(
+      { userId: winner.userId, amount: gameConfig.fight.winReward, reason: "FIGHT_WIN", refId: fightId },
+      tx
+    );
+    await tx.user.update({ where: { id: winner.userId }, data: { fightsWon: { increment: 1 } } });
+    await tx.user.update({ where: { id: forfeitingPlayer.userId }, data: { fightsLost: { increment: 1 } } });
+    await bumpLeaderboard(tx, winner.userId, { wins: 1, heliumEarned: gameConfig.fight.winReward });
+    await bumpLeaderboard(tx, forfeitingPlayer.userId, { losses: 1 });
+
+    return tx.fight.findUniqueOrThrow({ where: { id: fightId } });
+  });
+}
+
 export async function startFight(fightId: string, db: Db = prisma) {
   const roll1 = rollStartingNumber();
   let roll2 = rollStartingNumber();

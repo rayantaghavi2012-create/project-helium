@@ -15,8 +15,9 @@ import {
   cashOut,
   startDoubleChallenge,
   resolveDoubleChallenge,
+  forfeitFight,
 } from "../../services/fightService.js";
-import { announceFightState } from "../fightFlow.js";
+import { announceFightState, sendNextPuzzleForTurn } from "../fightFlow.js";
 import { prisma } from "../../db/client.js";
 
 export const fightComposer = new Composer<BotContext>();
@@ -239,7 +240,31 @@ fightComposer.callbackQuery(/^ans:(.+):(A|B)$/, async (ctx) => {
 
     if (result.turnComplete) {
       await announceFightState(ctx.api, answer.fightTurn.fightId);
+    } else {
+      // The current player still has another puzzle in this turn. Without this
+      // explicit send, the fight remains active but the player sees no way on.
+      await sendNextPuzzleForTurn(ctx.api, answer.fightTurn.fightId, user.id);
     }
+  } catch (err) {
+    if (err instanceof FightError) {
+      await ctx.answerCallbackQuery({ text: err.message, show_alert: true });
+      return;
+    }
+    throw err;
+  }
+});
+
+fightComposer.callbackQuery(/^fight:forfeit:(.+)$/, async (ctx) => {
+  const [, fightId] = ctx.match as unknown as [string, string];
+  const user = await getOrCreateUser(String(ctx.from.id), ctx.from.username, ctx.from.first_name);
+
+  try {
+    await forfeitFight(fightId, user.id);
+    await ctx.answerCallbackQuery({ text: "You left the fight." });
+    await ctx.editMessageText("🚪 You left the fight. Your opponent wins by forfeit.", {
+      reply_markup: backToMenuKeyboard,
+    });
+    await announceFightState(ctx.api, fightId);
   } catch (err) {
     if (err instanceof FightError) {
       await ctx.answerCallbackQuery({ text: err.message, show_alert: true });

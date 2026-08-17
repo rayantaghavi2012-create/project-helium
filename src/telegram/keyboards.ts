@@ -1,7 +1,7 @@
 import { InlineKeyboard } from "grammy";
 
 export const mainMenuKeyboard = new InlineKeyboard()
-  .text("🧩 Daily Puzzle", "menu:puzzle")
+  .text("🧩 Puzzle", "menu:puzzle")
   .text("🎁 Daily Box", "menu:dailybox")
   .row()
   .text("🧑‍🚀 Characters", "menu:characters")
@@ -41,11 +41,12 @@ export function upgradeCharacterKeyboard(userCharacterId: string, options: { sta
   return kb;
 }
 
-export function puzzleAnswerKeyboard(fightAnswerId: string, a: string, b: string, allowHint: boolean) {
+export function puzzleAnswerKeyboard(fightId: string, fightAnswerId: string, a: string, b: string, allowHint: boolean) {
   const kb = new InlineKeyboard()
     .text(`A) ${a}`, `ans:${fightAnswerId}:A`)
     .text(`B) ${b}`, `ans:${fightAnswerId}:B`);
   if (allowHint) kb.row().text("💡 Use Hint", `hint:${fightAnswerId}`);
+  kb.row().text("🚪 Leave Fight (forfeit)", `fight:forfeit:${fightId}`);
   return kb;
 }
 
