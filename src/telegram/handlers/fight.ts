@@ -16,6 +16,7 @@ import {
   startDoubleChallenge,
   resolveDoubleChallenge,
   forfeitFight,
+  FightTimedOutError,
 } from "../../services/fightService.js";
 import { announceFightState, sendNextPuzzleForTurn } from "../fightFlow.js";
 import { prisma } from "../../db/client.js";
@@ -246,6 +247,11 @@ fightComposer.callbackQuery(/^ans:(.+):(A|B)$/, async (ctx) => {
       await sendNextPuzzleForTurn(ctx.api, answer.fightTurn.fightId, user.id);
     }
   } catch (err) {
+    if (err instanceof FightTimedOutError) {
+      await ctx.answerCallbackQuery({ text: err.message, show_alert: true });
+      await announceFightState(ctx.api, answer.fightTurn.fightId);
+      return;
+    }
     if (err instanceof FightError) {
       await ctx.answerCallbackQuery({ text: err.message, show_alert: true });
       return;
@@ -266,6 +272,11 @@ fightComposer.callbackQuery(/^fight:forfeit:(.+)$/, async (ctx) => {
     });
     await announceFightState(ctx.api, fightId);
   } catch (err) {
+    if (err instanceof FightTimedOutError) {
+      await ctx.answerCallbackQuery({ text: err.message, show_alert: true });
+      await announceFightState(ctx.api, fightId);
+      return;
+    }
     if (err instanceof FightError) {
       await ctx.answerCallbackQuery({ text: err.message, show_alert: true });
       return;
@@ -294,6 +305,11 @@ fightComposer.callbackQuery(/^hint:(.+)$/, async (ctx) => {
       show_alert: true,
     });
   } catch (err) {
+    if (err instanceof FightTimedOutError) {
+      await ctx.answerCallbackQuery({ text: err.message, show_alert: true });
+      await announceFightState(ctx.api, answer.fightTurn.fightId);
+      return;
+    }
     if (err instanceof FightError) {
       await ctx.answerCallbackQuery({ text: err.message, show_alert: true });
       return;

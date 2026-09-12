@@ -11,6 +11,7 @@ import {
   startDoubleChallenge,
   resolveDoubleChallenge,
   forfeitFight,
+  expireTimedOutFights,
   FightError,
 } from "../src/services/fightService.js";
 import { getBalance } from "../src/services/walletService.js";
@@ -156,6 +157,26 @@ describe("fightService", () => {
     expect(completed.winnerId).toBe(b.user.id);
     expect(await getBalance(b.user.id)).toBe(gameConfig.fight.winReward);
     await expect(forfeitFight(fight.id, a.user.id)).rejects.toBeInstanceOf(FightError);
+  });
+
+  it("declares an active match a draw after the two-minute fight limit", async () => {
+    await ensurePuzzles(10);
+    const a = await makeUserWithCharacter();
+    const b = await makeUserWithCharacter();
+    const fight = await createFriendFight(a.user.id, b.user.id, a.userCharacter.id, b.userCharacter.id);
+
+    await prisma.fight.update({
+      where: { id: fight.id },
+      data: { startedAt: new Date(Date.now() - gameConfig.fight.totalFightTimeLimitMs - 1) },
+    });
+    expect(await expireTimedOutFights()).toContain(fight.id);
+
+    const completed = await prisma.fight.findUniqueOrThrow({ where: { id: fight.id } });
+    expect(completed.state).toBe("FINISHED");
+    expect(completed.winnerId).toBeNull();
+    expect(completed.rewardGranted).toBe(false);
+    expect(await getBalance(a.user.id)).toBe(0);
+    expect(await getBalance(b.user.id)).toBe(0);
   });
 });
 

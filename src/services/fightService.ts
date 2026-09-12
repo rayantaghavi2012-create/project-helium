@@ -12,6 +12,7 @@ type Db = PrismaClient | Prisma.TransactionClient;
 const ACTIVE_STATES = ["WAITING", "STARTING", "PLAYER_1_TURN", "PLAYER_2_TURN", "CALCULATING"];
 
 export class FightError extends Error {}
+export class FightTimedOutError extends FightError {}
 
 async function hintUsesFor(db: Db, userCharacterId: string): Promise<number> {
   const uc = await db.userCharacter.findUnique({ where: { id: userCharacterId } });
@@ -162,11 +163,12 @@ export async function cancelRandomFight(userId: string, fightId: string) {
 
 /** Ends an in-progress fight immediately and awards the win to the opponent. */
 export async function forfeitFight(fightId: string, userId: string) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const fight = await tx.fight.findUniqueOrThrow({
       where: { id: fightId },
       include: { participants: true },
     });
+    if (await expireFightIfNeeded(fight, tx)) return null;
     if (!["PLAYER_1_TURN", "PLAYER_2_TURN"].includes(fight.state)) {
       throw new FightError("This fight can no longer be left.");
     }
@@ -198,6 +200,8 @@ export async function forfeitFight(fightId: string, userId: string) {
 
     return tx.fight.findUniqueOrThrow({ where: { id: fightId } });
   });
+  if (!result) throw new FightTimedOutError("The two-minute fight limit expired; the match is a draw.");
+  return result;
 }
 
 export async function startFight(fightId: string, db: Db = prisma) {
@@ -216,6 +220,7 @@ export async function startFight(fightId: string, db: Db = prisma) {
       startingPlayer,
       currentTurn: startingPlayer,
       currentRound: 1,
+      startedAt: new Date(),
     },
   });
 
@@ -231,8 +236,9 @@ function slotStateName(slot: number) {
 }
 
 export async function presentNextPuzzle(fightId: string, userId: string) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const fight = await tx.fight.findUniqueOrThrow({ where: { id: fightId } });
+    if (await expireFightIfNeeded(fight, tx)) return null;
     if (!ACTIVE_STATES.includes(fight.state) || !fight.currentTurn) {
       throw new FightError("Fight is not accepting puzzles right now.");
     }
@@ -302,6 +308,8 @@ export async function presentNextPuzzle(fightId: string, userId: string) {
       puzzlesPerTurn: gameConfig.fight.puzzlesPerTurn,
     };
   });
+  if (!result) throw new FightTimedOutError("The two-minute fight limit expired; the match is a draw.");
+  return result;
 }
 
 export async function submitAnswer(params: {
@@ -313,8 +321,9 @@ export async function submitAnswer(params: {
 }) {
   const { fightId, userId, fightAnswerId, selected, useSpeedBonus } = params;
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const fight = await tx.fight.findUniqueOrThrow({ where: { id: fightId } });
+    if (await expireFightIfNeeded(fight, tx)) return null;
     const answer = await tx.fightAnswer.findUniqueOrThrow({
       where: { id: fightAnswerId },
       include: { fightTurn: true, puzzle: true },
@@ -381,10 +390,14 @@ export async function submitAnswer(params: {
 
     return { correct, timedOut, responseMs, turnComplete };
   });
+  if (!result) throw new FightTimedOutError("The two-minute fight limit expired; the match is a draw.");
+  return result;
 }
 
 export async function useHint(fightId: string, userId: string, fightAnswerId: string) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
+    const fight = await tx.fight.findUniqueOrThrow({ where: { id: fightId } });
+    if (await expireFightIfNeeded(fight, tx)) return null;
     const answer = await tx.fightAnswer.findUniqueOrThrow({
       where: { id: fightAnswerId },
       include: { fightTurn: true, puzzle: true },
@@ -407,6 +420,46 @@ export async function useHint(fightId: string, userId: string, fightAnswerId: st
     const wrongOption = answer.puzzle.correct === "A" ? "B" : "A";
     return { eliminated: wrongOption };
   });
+  if (!result) throw new FightTimedOutError("The two-minute fight limit expired; the match is a draw.");
+  return result;
+}
+
+/**
+ * Completes every live fight whose two-minute match clock has elapsed.
+ * The conditional update makes concurrent scheduler runs and player actions safe.
+ */
+export async function expireTimedOutFights(now = new Date()): Promise<string[]> {
+  const cutoff = new Date(now.getTime() - gameConfig.fight.totalFightTimeLimitMs);
+  const candidates = await prisma.fight.findMany({
+    where: { state: { in: ACTIVE_STATES }, startedAt: { not: null, lte: cutoff } },
+    select: { id: true },
+  });
+
+  const expired: string[] = [];
+  for (const { id } of candidates) {
+    const claimed = await prisma.fight.updateMany({
+      where: { id, state: { in: ACTIVE_STATES }, startedAt: { not: null, lte: cutoff } },
+      data: { state: "FINISHED", winnerId: null, rewardGranted: false, finishedAt: now },
+    });
+    if (claimed.count === 1) expired.push(id);
+  }
+  return expired;
+}
+
+async function expireFightIfNeeded(
+  fight: { id: string; state: string; startedAt: Date | null },
+  tx: Prisma.TransactionClient
+) : Promise<boolean> {
+  if (!fight.startedAt || !ACTIVE_STATES.includes(fight.state)) return false;
+  const cutoff = Date.now() - gameConfig.fight.totalFightTimeLimitMs;
+  if (fight.startedAt.getTime() > cutoff) return false;
+
+  const claimed = await tx.fight.updateMany({
+    where: { id: fight.id, state: { in: ACTIVE_STATES } },
+    data: { state: "FINISHED", winnerId: null, rewardGranted: false, finishedAt: new Date() },
+  });
+  if (claimed.count === 1) return true;
+  throw new FightError("This fight has already finished.");
 }
 
 async function advanceFight(fightId: string, tx: Prisma.TransactionClient) {
@@ -520,8 +573,6 @@ export async function startDoubleChallenge(fightId: string, userId: string) {
     if (fight.state !== "FINISHED") throw new FightError("Nothing to double.");
     if (fight.doubleChallengeUsed) throw new FightError("This reward was already resolved.");
 
-    await tx.fight.update({ where: { id: fightId }, data: { state: "DOUBLE_CHALLENGE" } });
-
     const activeCount = await tx.puzzle.count({ where: { active: true } });
     if (activeCount === 0) throw new FightError("No puzzle available for the challenge.");
     const [puzzle] = await tx.puzzle.findMany({
@@ -530,6 +581,10 @@ export async function startDoubleChallenge(fightId: string, userId: string) {
       skip: Math.floor(Math.random() * activeCount),
     });
     if (!puzzle) throw new FightError("No puzzle available for the challenge.");
+
+    // Only enter this state once the challenge can actually be shown. Otherwise
+    // an empty puzzle catalog would strand the winner in DOUBLE_CHALLENGE.
+    await tx.fight.update({ where: { id: fightId }, data: { state: "DOUBLE_CHALLENGE" } });
 
     return {
       puzzleId: puzzle.id,

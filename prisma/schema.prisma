@@ -111,6 +111,7 @@ model Fight {
   winnerId    String?
   rewardGranted Boolean @default(false)
   doubleChallengeUsed Boolean @default(false)
+  startedAt   DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   finishedAt  DateTime?

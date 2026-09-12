@@ -48,6 +48,9 @@ export const gameConfig = {
   },
 
   fight: {
+    // A match has a hard overall limit in addition to the per-puzzle limit.
+    // When it expires, the result is a draw and neither player is rewarded.
+    totalFightTimeLimitMs: 2 * 60 * 1000,
     puzzlesPerTurn: 2,
     // Assumption: one turn each (2 puzzles per player, 4 total) per fight,
     // matching the worked example in the spec. Configurable if fights should
