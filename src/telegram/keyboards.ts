@@ -1,5 +1,9 @@
 import { InlineKeyboard } from "grammy";
 
+export const languageKeyboard = new InlineKeyboard()
+  .text("فارسی", "lang:fa")
+  .text("English", "lang:en");
+
 export const mainMenuKeyboard = new InlineKeyboard()
   .text("🧩 Puzzle", "menu:puzzle")
   .text("🎁 Daily Box", "menu:dailybox")

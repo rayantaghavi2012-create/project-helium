@@ -1,7 +1,7 @@
 import { Composer } from "grammy";
 import type { BotContext } from "../session.js";
-import { mainMenuKeyboard, backToMenuKeyboard, fightMenuKeyboard } from "../keyboards.js";
-import { getOrCreateUser } from "../../services/userService.js";
+import { mainMenuKeyboard, backToMenuKeyboard, fightMenuKeyboard, languageKeyboard } from "../keyboards.js";
+import { completeOnboarding, getOrCreateUser, type SupportedLanguage } from "../../services/userService.js";
 import { getWeeklyLeaderboard, getPlayerRank } from "../../services/leaderboardService.js";
 import { prisma } from "../../db/client.js";
 import { acceptInvite, InviteError } from "../../services/inviteService.js";
@@ -11,9 +11,21 @@ export const menuComposer = new Composer<BotContext>();
 
 const WELCOME =
   "🧩 *Project Helium*\n\nSolve puzzles, earn Helium, collect characters, and fight your way up the leaderboard.";
+const ONBOARDING = "🌐 زبان مورد نظرت را انتخاب کن / Choose your language:";
+
+function welcomeFor(language: SupportedLanguage) {
+  return language === "fa"
+    ? "🧩 *پروژه هلیوم*\n\nمعما حل کن، هلیوم بگیر، کاراکتر جمع کن و مبارزه کن. یک کاراکتر شروع هم برای اولین فایتت انتخاب شده است."
+    : `${WELCOME}\n\nA Starter character has been selected for your first fight.`;
+}
 
 menuComposer.command("start", async (ctx) => {
   const user = await getOrCreateUser(String(ctx.from!.id), ctx.from?.username, ctx.from?.first_name);
+
+  if (!user.language) {
+    await ctx.reply(ONBOARDING, { reply_markup: languageKeyboard });
+    return;
+  }
 
   const payload = ctx.match;
   if (typeof payload === "string" && payload.startsWith("invite_")) {
@@ -38,7 +50,15 @@ menuComposer.command("start", async (ctx) => {
     }
   }
 
-  await ctx.reply(WELCOME, { parse_mode: "Markdown", reply_markup: mainMenuKeyboard });
+  await ctx.reply(welcomeFor(user.language as SupportedLanguage), { parse_mode: "Markdown", reply_markup: mainMenuKeyboard });
+});
+
+menuComposer.callbackQuery(/^lang:(fa|en)$/, async (ctx) => {
+  const [, language] = ctx.match as unknown as [string, SupportedLanguage];
+  const user = await getOrCreateUser(String(ctx.from.id), ctx.from.username, ctx.from.first_name);
+  await completeOnboarding(user.id, language);
+  await ctx.answerCallbackQuery({ text: language === "fa" ? "زبان ذخیره شد" : "Language saved" });
+  await ctx.editMessageText(welcomeFor(language), { parse_mode: "Markdown", reply_markup: mainMenuKeyboard });
 });
 
 menuComposer.callbackQuery("menu:main", async (ctx) => {

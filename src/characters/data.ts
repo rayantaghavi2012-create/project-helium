@@ -15,6 +15,17 @@ export interface CharacterSeed {
 // rather than raw stats, so a cheap character stays viable.
 export const characterSeeds: CharacterSeed[] = [
   {
+    key: "starter",
+    name: "Starter",
+    rarity: "COMMON",
+    price: 0,
+    baseMaxHp: 55,
+    basePower: 1,
+    baseSpeed: 1,
+    ability: "NONE",
+    description: "A free, lightweight character for your first fights.",
+  },
+  {
     key: "rookie",
     name: "Rookie",
     rarity: "COMMON",
