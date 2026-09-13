@@ -1,7 +1,7 @@
 import { Composer } from "grammy";
 import type { BotContext } from "../session.js";
 import { mainMenuKeyboard, backToMenuKeyboard, fightMenuKeyboard, languageKeyboard } from "../keyboards.js";
-import { completeOnboarding, getOrCreateUser, type SupportedLanguage } from "../../services/userService.js";
+import { completeOnboarding, ensureDefaultCharacter, getOrCreateUser, type SupportedLanguage } from "../../services/userService.js";
 import { getWeeklyLeaderboard, getPlayerRank } from "../../services/leaderboardService.js";
 import { prisma } from "../../db/client.js";
 import { acceptInvite, InviteError } from "../../services/inviteService.js";
@@ -20,15 +20,13 @@ function welcomeFor(language: SupportedLanguage) {
 }
 
 menuComposer.command("start", async (ctx) => {
-  const user = await getOrCreateUser(String(ctx.from!.id), ctx.from?.username, ctx.from?.first_name);
+  let user = await getOrCreateUser(String(ctx.from!.id), ctx.from?.username, ctx.from?.first_name);
+  user = await ensureDefaultCharacter(user.id);
 
   if (!user.language) {
     await ctx.reply("برای انتخاب زبان، دستور /language را بفرست.\nChoose a language with /language.");
     return;
   }
-
-  // Also repairs accounts created before the starter fighter was introduced.
-  await completeOnboarding(user.id, user.language as SupportedLanguage);
 
   const payload = ctx.match;
   if (typeof payload === "string" && payload.startsWith("invite_")) {
