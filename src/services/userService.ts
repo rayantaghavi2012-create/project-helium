@@ -29,6 +29,11 @@ export async function completeOnboarding(userId: string, language: SupportedLang
       create: starterCharacter,
     });
 
+    const selectedActiveCharacter = user.selectedUserCharacterId
+      ? await tx.userCharacter.findFirst({
+          where: { id: user.selectedUserCharacterId, userId, status: "ACTIVE" },
+        })
+      : null;
     const activeCharacter = await tx.userCharacter.findFirst({
       where: { userId, status: "ACTIVE" },
       orderBy: { acquiredAt: "asc" },
@@ -48,9 +53,9 @@ export async function completeOnboarding(userId: string, language: SupportedLang
 
     return tx.user.update({
       where: { id: userId },
-      // Never replace a choice made by an existing player. New players have no
-      // selection, so their free Starter is selected by default.
-      data: { language, selectedUserCharacterId: user.selectedUserCharacterId ?? selected.id },
+      // Preserve a valid selection, but repair a missing or defeated selection
+      // so every player leaving onboarding can start a fight immediately.
+      data: { language, selectedUserCharacterId: selectedActiveCharacter?.id ?? selected.id },
     });
   });
 }

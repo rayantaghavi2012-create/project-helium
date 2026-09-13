@@ -27,6 +27,9 @@ menuComposer.command("start", async (ctx) => {
     return;
   }
 
+  // Also repairs accounts created before the starter fighter was introduced.
+  await completeOnboarding(user.id, user.language as SupportedLanguage);
+
   const payload = ctx.match;
   if (typeof payload === "string" && payload.startsWith("invite_")) {
     const code = payload.slice("invite_".length);

@@ -430,15 +430,23 @@ export async function useHint(fightId: string, userId: string, fightAnswerId: st
  */
 export async function expireTimedOutFights(now = new Date()): Promise<string[]> {
   const cutoff = new Date(now.getTime() - gameConfig.fight.totalFightTimeLimitMs);
+  const timedOut = {
+    OR: [
+      { startedAt: { not: null, lte: cutoff } },
+      // Fights created before the startedAt column existed must not permanently
+      // block their players. Their creation time is a safe legacy fallback.
+      { startedAt: null, createdAt: { lte: cutoff } },
+    ],
+  };
   const candidates = await prisma.fight.findMany({
-    where: { state: { in: ACTIVE_STATES }, startedAt: { not: null, lte: cutoff } },
+    where: { state: { in: ACTIVE_STATES }, ...timedOut },
     select: { id: true },
   });
 
   const expired: string[] = [];
   for (const { id } of candidates) {
     const claimed = await prisma.fight.updateMany({
-      where: { id, state: { in: ACTIVE_STATES }, startedAt: { not: null, lte: cutoff } },
+      where: { id, state: { in: ACTIVE_STATES }, ...timedOut },
       data: { state: "FINISHED", winnerId: null, rewardGranted: false, finishedAt: now },
     });
     if (claimed.count === 1) expired.push(id);
@@ -447,12 +455,13 @@ export async function expireTimedOutFights(now = new Date()): Promise<string[]> 
 }
 
 async function expireFightIfNeeded(
-  fight: { id: string; state: string; startedAt: Date | null },
+  fight: { id: string; state: string; startedAt: Date | null; createdAt: Date },
   tx: Prisma.TransactionClient
 ) : Promise<boolean> {
-  if (!fight.startedAt || !ACTIVE_STATES.includes(fight.state)) return false;
+  if (!ACTIVE_STATES.includes(fight.state)) return false;
   const cutoff = Date.now() - gameConfig.fight.totalFightTimeLimitMs;
-  if (fight.startedAt.getTime() > cutoff) return false;
+  const clockStartedAt = fight.startedAt ?? fight.createdAt;
+  if (clockStartedAt.getTime() > cutoff) return false;
 
   const claimed = await tx.fight.updateMany({
     where: { id: fight.id, state: { in: ACTIVE_STATES } },

@@ -178,6 +178,23 @@ describe("fightService", () => {
     expect(await getBalance(a.user.id)).toBe(0);
     expect(await getBalance(b.user.id)).toBe(0);
   });
+
+  it("clears a legacy active fight that has no startedAt timestamp", async () => {
+    await ensurePuzzles(10);
+    const a = await makeUserWithCharacter();
+    const b = await makeUserWithCharacter();
+    const fight = await createFriendFight(a.user.id, b.user.id, a.userCharacter.id, b.userCharacter.id);
+
+    await prisma.fight.update({
+      where: { id: fight.id },
+      data: {
+        startedAt: null,
+        createdAt: new Date(Date.now() - gameConfig.fight.totalFightTimeLimitMs - 1),
+      },
+    });
+    expect(await expireTimedOutFights()).toContain(fight.id);
+    expect((await prisma.fight.findUniqueOrThrow({ where: { id: fight.id } })).winnerId).toBeNull();
+  });
 });
 
 describe("random matchmaking", () => {
