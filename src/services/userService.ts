@@ -32,12 +32,13 @@ async function ensureStarterSelection(tx: Prisma.TransactionClient, user: { id: 
         where: { id: user.selectedUserCharacterId, userId: user.id, status: "ACTIVE" },
       })
     : null;
-  const activeCharacter = await tx.userCharacter.findFirst({
-    where: { userId: user.id, status: "ACTIVE" },
-    orderBy: { acquiredAt: "asc" },
+  // Starter is granted independently of any character earned from a box or
+  // bought in the shop. An existing player keeps their valid selection; a new
+  // player (or one with an invalid selection) starts with Starter selected.
+  const existingStarter = await tx.userCharacter.findFirst({
+    where: { userId: user.id, characterId: template.id },
   });
-
-  const selected = activeCharacter ?? await tx.userCharacter.create({
+  const starter = existingStarter ?? await tx.userCharacter.create({
     data: {
       userId: user.id,
       characterId: template.id,
@@ -48,7 +49,7 @@ async function ensureStarterSelection(tx: Prisma.TransactionClient, user: { id: 
       status: "ACTIVE",
     },
   });
-  return selectedActiveCharacter?.id ?? selected.id;
+  return selectedActiveCharacter?.id ?? starter.id;
 }
 
 /** Grants and selects the free Starter before language onboarding is complete. */
