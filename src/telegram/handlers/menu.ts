@@ -23,7 +23,7 @@ menuComposer.command("start", async (ctx) => {
   const user = await getOrCreateUser(String(ctx.from!.id), ctx.from?.username, ctx.from?.first_name);
 
   if (!user.language) {
-    await ctx.reply(ONBOARDING, { reply_markup: languageKeyboard });
+    await ctx.reply("برای انتخاب زبان، دستور /language را بفرست.\nChoose a language with /language.");
     return;
   }
 
@@ -51,6 +51,12 @@ menuComposer.command("start", async (ctx) => {
   }
 
   await ctx.reply(welcomeFor(user.language as SupportedLanguage), { parse_mode: "Markdown", reply_markup: mainMenuKeyboard });
+});
+
+// Kept separate from /start so players can change or set their preference on demand.
+menuComposer.command("language", async (ctx) => {
+  await getOrCreateUser(String(ctx.from!.id), ctx.from?.username, ctx.from?.first_name);
+  await ctx.reply(ONBOARDING, { reply_markup: languageKeyboard });
 });
 
 menuComposer.callbackQuery(/^lang:(fa|en)$/, async (ctx) => {
